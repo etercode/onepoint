@@ -1,7 +1,4 @@
 
-# Contains secrets (GitHub PAT, APP_SECRET) — never commit this file.
-/.env.dev
-
 ###> symfony/framework-bundle ###
 /.env.local
 /.env.local.php

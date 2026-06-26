@@ -1,4 +1,7 @@
 
+# JetBrains IDE settings
+/.idea/
+
 ###> symfony/framework-bundle ###
 /.env.local
 /.env.local.php

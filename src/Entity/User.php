@@ -2,27 +2,41 @@
 
 namespace App\Entity;
 
+use App\Entity\Traits\TimestampableTrait;
 use App\Repository\UserRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 // "user" is a reserved keyword in PostgreSQL, so the table is named "users".
+// Uniqueness is partial (only among non-soft-deleted rows) so a deleted user's
+// email/username can be reused.
 #[ORM\Entity(repositoryClass: UserRepository::class)]
 #[ORM\Table(name: 'users')]
-#[ORM\UniqueConstraint(name: 'uniq_user_email', columns: ['email'])]
-#[ORM\UniqueConstraint(name: 'uniq_user_username', columns: ['username'])]
-class User
+#[ORM\HasLifecycleCallbacks]
+#[ORM\UniqueConstraint(name: 'uniq_user_email', columns: ['email'], options: ['where' => '(deleted_at IS NULL)'])]
+#[ORM\UniqueConstraint(name: 'uniq_user_username', columns: ['username'], options: ['where' => '(deleted_at IS NULL)'])]
+class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
+    use TimestampableTrait;
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column(length: 180, unique: true)]
+    #[ORM\Column(length: 180)]
     private ?string $email = null;
 
     /**
-     * The hashed password. Hashing/auth is intentionally not implemented yet.
+     * @var list<string>
+     */
+    #[ORM\Column(type: Types::JSON)]
+    private array $roles = [];
+
+    /**
+     * The hashed password.
      */
     #[ORM\Column]
     private ?string $password = null;
@@ -33,7 +47,7 @@ class User
     #[ORM\Column(length: 100)]
     private ?string $lastname = null;
 
-    #[ORM\Column(length: 180, unique: true)]
+    #[ORM\Column(length: 180)]
     private ?string $username = null;
 
     /**
@@ -71,6 +85,36 @@ class User
         return $this;
     }
 
+    /**
+     * The unique identifier used by the security system (we authenticate by email).
+     */
+    public function getUserIdentifier(): string
+    {
+        return (string) $this->email;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getRoles(): array
+    {
+        $roles = $this->roles;
+        // Guarantee every user at least has ROLE_USER.
+        $roles[] = 'ROLE_USER';
+
+        return array_values(array_unique($roles));
+    }
+
+    /**
+     * @param list<string> $roles
+     */
+    public function setRoles(array $roles): static
+    {
+        $this->roles = $roles;
+
+        return $this;
+    }
+
     public function getPassword(): ?string
     {
         return $this->password;
@@ -81,6 +125,14 @@ class User
         $this->password = $password;
 
         return $this;
+    }
+
+    /**
+     * Called after authentication to clear any temporary sensitive data.
+     * We store nothing in plaintext, so there is nothing to erase.
+     */
+    public function eraseCredentials(): void
+    {
     }
 
     public function getName(): ?string

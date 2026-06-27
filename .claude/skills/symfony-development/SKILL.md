@@ -58,3 +58,17 @@ The app is served at <http://localhost:8088>.
   `config/routes.yaml` or via PHP attributes on controllers, per-package config
   in `config/packages/`.
 - Never hand-edit `composer.lock`, `symfony.lock`, `vendor/`, or `var/`.
+
+## Data access conventions
+
+- **Don't inline raw repository queries in controllers/services.** Wrap them in
+  intention-revealing repository methods (e.g. `existsActiveByEmail()`,
+  `findActiveByToken()`). The controller should read like a sentence, not embed
+  query criteria.
+- **Use `count()`/`EXISTS` for existence checks — never `findOneBy()`/`find()`
+  just to compare against `null`.** `findOneBy` hydrates a full entity object;
+  if you only need a yes/no answer, that's wasted work. Example:
+  `return $this->count(['email' => $email, 'deletedAt' => null]) > 0;`
+- **Encapsulate the soft-delete filter.** The `deletedAt IS NULL` ("active")
+  condition must live inside repository methods, not be repeated at call sites,
+  so it can't be forgotten.

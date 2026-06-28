@@ -27,6 +27,11 @@ RUN { \
         echo 'opcache.max_accelerated_files=20000'; \
         echo 'realpath_cache_ttl=600'; \
         echo 'memory_limit=256M'; \
+        # Profile-photo uploads: keep above the app's 5M image cap so the \
+        # validator (not PHP) rejects oversized files. post_max_size must \
+        # exceed upload_max_filesize to leave room for multipart overhead. \
+        echo 'upload_max_filesize=8M'; \
+        echo 'post_max_size=10M'; \
     } > /usr/local/etc/php/conf.d/symfony.ini
 
 WORKDIR /var/www/app

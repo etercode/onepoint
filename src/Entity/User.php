@@ -81,6 +81,16 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 12, nullable: true)]
     private ?string $language = null;
 
+    /**
+     * Free-form per-user preferences (currently appearance/theming only),
+     * stored as JSON. Only holds values the user has explicitly set; defaults
+     * are the client's responsibility. Null until the first save.
+     *
+     * @var array<string, mixed>|null
+     */
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    private ?array $preferences = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -252,6 +262,24 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setLanguage(?string $language): static
     {
         $this->language = $language;
+
+        return $this;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function getPreferences(): ?array
+    {
+        return $this->preferences;
+    }
+
+    /**
+     * @param array<string, mixed>|null $preferences
+     */
+    public function setPreferences(?array $preferences): static
+    {
+        $this->preferences = $preferences;
 
         return $this;
     }

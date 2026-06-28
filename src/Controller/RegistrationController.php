@@ -39,7 +39,9 @@ class RegistrationController extends AbstractController
             ->setLastname($payload->lastname)
             ->setProfilePhoto($payload->profilePhoto)
             ->setDescription($payload->description)
-            ->setStatusText($payload->statusText);
+            ->setStatusText($payload->statusText)
+            ->setTimezone($payload->timezone)
+            ->setLanguage($payload->language);
 
         if (null !== $payload->birthday) {
             // Validated as a date by the DTO; safe to parse.

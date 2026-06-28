@@ -5,20 +5,13 @@ namespace App\Dto;
 use Symfony\Component\Validator\Constraints as Assert;
 
 /**
- * Incoming payload for POST /api/register. Deserialized and validated
- * automatically via #[MapRequestPayload] (returns 422 on failure).
+ * Incoming payload for PATCH /api/me. Deserialized and validated automatically
+ * via #[MapRequestPayload] (returns 422 on failure). Treated as a full
+ * replacement of the editable profile fields.
  */
-readonly class RegisterRequest
+readonly class UpdateProfileRequest
 {
     public function __construct(
-        #[Assert\NotBlank]
-        #[Assert\Email]
-        public string $email = '',
-
-        #[Assert\NotBlank]
-        #[Assert\Length(min: 8, max: 4096)]
-        public string $password = '',
-
         #[Assert\NotBlank]
         #[Assert\Length(min: 3, max: 180)]
         public string $username = '',
@@ -31,8 +24,11 @@ readonly class RegisterRequest
         #[Assert\Length(max: 100)]
         public string $lastname = '',
 
-        #[Assert\Length(max: 255)]
-        public ?string $profilePhoto = null,
+        #[Assert\Timezone]
+        public ?string $timezone = null,
+
+        #[Assert\Language]
+        public ?string $language = null,
 
         #[Assert\Date(message: 'birthday must be a valid date in YYYY-MM-DD format.')]
         public ?string $birthday = null,
@@ -41,12 +37,6 @@ readonly class RegisterRequest
 
         #[Assert\Length(max: 255)]
         public ?string $statusText = null,
-
-        #[Assert\Timezone]
-        public ?string $timezone = null,
-
-        #[Assert\Language]
-        public ?string $language = null,
     ) {
     }
 }

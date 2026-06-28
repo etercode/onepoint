@@ -180,6 +180,164 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    patch:
+      tags: [User]
+      summary: Update the authenticated user's profile
+      description: >
+        Full replacement of the editable profile fields. Send all of them
+        (a profile form holds the current values). Email and password are not
+        editable here (see the dedicated password endpoint).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+            example:
+              username: alice
+              name: Alice
+              lastname: Smith
+              timezone: Europe/Istanbul
+              language: az
+              birthday: "1995-04-12"
+              statusText: Hello there
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Username already in use by another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: username_already_used
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /api/me/password:
+    post:
+      tags: [User]
+      summary: Change the authenticated user's password
+      description: >
+        Verifies the current password, then sets the new one. On success every
+        OTHER session is revoked; the token used for this request stays valid.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+            example:
+              currentPassword: s3cret!!
+              newPassword: n3ws3cret!!
+      responses:
+        '204':
+          description: Password changed. No content.
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Current password is wrong, or new password failed validation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: invalid_current_password
+
+  /api/me/photo:
+    post:
+      tags: [User]
+      summary: Upload or replace the authenticated user's profile photo
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [photo]
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                  description: JPEG, PNG or WebP image, max 5 MB.
+      responses:
+        '200':
+          description: Photo stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoUploaded'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing file or invalid image (type/size)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /api/username/available:
+    get:
+      tags: [User]
+      summary: Check whether a username is available
+      description: >
+        Public (used by the registration and profile-edit forms). Reports
+        availability among active users; it is user-agnostic, so the edit form
+        should skip the call when the username is unchanged.
+      security: []
+      parameters:
+        - name: username
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 180
+      responses:
+        '200':
+          description: Availability result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsernameAvailability'
+              example:
+                username: alice
+                available: false
+        '422':
+          description: Missing or malformed username
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
 
 components:
   securitySchemes:
@@ -224,6 +382,77 @@ components:
           type: [string, "null"]
           maxLength: 255
           description: Short free-text status (1-2 sentences).
+        timezone:
+          type: [string, "null"]
+          maxLength: 64
+          description: IANA timezone identifier, e.g. Europe/Istanbul.
+        language:
+          type: [string, "null"]
+          maxLength: 12
+          description: ISO 639-1 language code, e.g. en, az.
+
+    UpdateProfileRequest:
+      type: object
+      required: [username, name, lastname]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 180
+        name:
+          type: string
+          maxLength: 100
+        lastname:
+          type: string
+          maxLength: 100
+        timezone:
+          type: [string, "null"]
+          maxLength: 64
+          description: IANA timezone identifier, e.g. Europe/Istanbul.
+        language:
+          type: [string, "null"]
+          maxLength: 12
+          description: ISO 639-1 language code, e.g. en, az.
+        birthday:
+          type: [string, "null"]
+          format: date
+          description: YYYY-MM-DD
+        description:
+          type: [string, "null"]
+        statusText:
+          type: [string, "null"]
+          maxLength: 255
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 4096
+
+    UsernameAvailability:
+      type: object
+      properties:
+        username:
+          type: string
+        available:
+          type: boolean
+
+    PhotoUploaded:
+      type: object
+      properties:
+        profilePhoto:
+          type: string
+          description: Stored path relative to the uploads root.
+          example: avatars/alice-65f0c1ab2d3e4.webp
+        url:
+          type: string
+          description: Public URL to fetch the image.
+          example: /uploads/avatars/alice-65f0c1ab2d3e4.webp
 
     Credentials:
       type: object
@@ -289,6 +518,16 @@ components:
           example: [ROLE_USER]
         profilePhoto:
           type: [string, "null"]
+          description: Stored path relative to the uploads root.
+        profilePhotoUrl:
+          type: [string, "null"]
+          description: Public URL for profilePhoto, or null when unset.
+        timezone:
+          type: [string, "null"]
+          description: IANA timezone identifier.
+        language:
+          type: [string, "null"]
+          description: ISO 639-1 language code.
         birthday:
           type: [string, "null"]
           format: date

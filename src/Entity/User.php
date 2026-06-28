@@ -68,6 +68,19 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $statusText = null;
 
+    /**
+     * Preferred IANA timezone identifier (e.g. "Asia/Baku").
+     */
+    #[ORM\Column(length: 64, nullable: true)]
+    private ?string $timezone = null;
+
+    /**
+     * Preferred UI language as an ISO 639-1 code (e.g. "en", "az"). A display
+     * preference for the client; the API itself stays language-agnostic.
+     */
+    #[ORM\Column(length: 12, nullable: true)]
+    private ?string $language = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -215,6 +228,30 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setStatusText(?string $statusText): static
     {
         $this->statusText = $statusText;
+
+        return $this;
+    }
+
+    public function getTimezone(): ?string
+    {
+        return $this->timezone;
+    }
+
+    public function setTimezone(?string $timezone): static
+    {
+        $this->timezone = $timezone;
+
+        return $this;
+    }
+
+    public function getLanguage(): ?string
+    {
+        return $this->language;
+    }
+
+    public function setLanguage(?string $language): static
+    {
+        $this->language = $language;
 
         return $this;
     }

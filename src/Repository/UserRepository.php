@@ -32,4 +32,21 @@ class UserRepository extends ServiceEntityRepository
     {
         return $this->count(['username' => $username, 'deletedAt' => null]) > 0;
     }
+
+    /**
+     * Like existsActiveByUsername(), but ignores the given user id. Used when a
+     * user updates their profile so keeping their own username is not a conflict.
+     */
+    public function existsActiveByUsernameExcludingId(string $username, int $excludedId): bool
+    {
+        return (int) $this->createQueryBuilder('u')
+            ->select('COUNT(u.id)')
+            ->andWhere('u.username = :username')
+            ->andWhere('u.deletedAt IS NULL')
+            ->andWhere('u.id != :excludedId')
+            ->setParameter('username', $username)
+            ->setParameter('excludedId', $excludedId)
+            ->getQuery()
+            ->getSingleScalarResult() > 0;
+    }
 }

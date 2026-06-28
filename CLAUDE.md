@@ -21,10 +21,15 @@ A Symfony **API** application (minimal skeleton, no webapp) running in Docker.
 - Keep the project lean — it is API-only; only add packages a feature needs.
 - Never hand-edit generated files: `composer.lock`, `symfony.lock`, `vendor/`,
   `var/`.
+- **Keep the API docs in sync.** Whenever you add or change an endpoint
+  (path, request/response shape, status codes, auth), update
+  `docs/openapi.yaml` in the same change. The interactive docs (Swagger UI)
+  are served at http://localhost:8088/docs and read that spec.
 
 ## Layout
 
 - `src/` — application code (PSR-4 `App\` → `src/`); controllers in `src/Controller/`
 - `config/` — routes, services, per-package config
 - `public/index.php` — single HTTP entry point
+- `docs/` — `openapi.yaml` (hand-maintained API spec) + vendored Swagger UI; served at `/docs`
 - `compose.yaml`, `docker/` — container environment

@@ -72,3 +72,13 @@ The app is served at <http://localhost:8088>.
 - **Encapsulate the soft-delete filter.** The `deletedAt IS NULL` ("active")
   condition must live inside repository methods, not be repeated at call sites,
   so it can't be forgotten.
+
+## API documentation
+
+- The API is documented by a hand-maintained OpenAPI spec at
+  `docs/openapi.yaml`, rendered by a self-hosted Swagger UI at
+  `http://localhost:8088/docs` (assets vendored in `docs/swagger-ui/`).
+- **Whenever you add or change an endpoint, update `docs/openapi.yaml` in the
+  same change** — paths, request/response schemas, status codes, and security.
+  The frontend is built from this spec in a separate session, so it must stay
+  accurate.

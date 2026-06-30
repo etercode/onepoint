@@ -50,6 +50,29 @@ class CategoryRepository extends ServiceEntityRepository
         return null === $row ? null : $this->mapRow($row);
     }
 
+    public function findOneActiveById(int $id): ?Category
+    {
+        return $this->findOneBy(['id' => $id, 'deletedAt' => null]);
+    }
+
+    /**
+     * Whether an active category (other than $excludeId) already uses this slug.
+     */
+    public function existsActiveBySlugExcludingId(string $slug, ?int $excludeId = null): bool
+    {
+        $qb = $this->createQueryBuilder('c')
+            ->select('COUNT(c.id)')
+            ->andWhere('c.slug = :slug')
+            ->andWhere('c.deletedAt IS NULL')
+            ->setParameter('slug', $slug);
+
+        if (null !== $excludeId) {
+            $qb->andWhere('c.id != :id')->setParameter('id', $excludeId);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult() > 0;
+    }
+
     private function statsQuery(): \Doctrine\ORM\QueryBuilder
     {
         return $this->createQueryBuilder('c')

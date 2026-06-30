@@ -6,7 +6,10 @@ use App\Catalog\CatalogData;
 use App\Catalog\Slugger;
 use App\Entity\Category;
 use App\Entity\Collection;
+use App\Entity\Order;
+use App\Entity\OrderItem;
 use App\Entity\Product;
+use App\Entity\ProductImage;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -46,11 +49,21 @@ class SeedCatalogCommand extends Command
         }
 
         if ($fresh) {
-            // Products reference collections/categories, so delete them first.
+            // Orders reference products, so a full catalog wipe must clear them
+            // first (re-seed sample data afterwards with app:sample:seed).
+            $hadOrders = $this->em->getRepository(Order::class)->count([]) > 0;
+            $this->em->createQuery('DELETE FROM '.OrderItem::class.' i')->execute();
+            $this->em->createQuery('DELETE FROM '.Order::class.' o')->execute();
+
+            // Respect FK order: images -> products -> collections/categories.
+            $this->em->createQuery('DELETE FROM '.ProductImage::class.' pi')->execute();
             $this->em->createQuery('DELETE FROM '.Product::class.' p')->execute();
             $this->em->createQuery('DELETE FROM '.Collection::class.' c')->execute();
             $this->em->createQuery('DELETE FROM '.Category::class.' c')->execute();
             $io->note('Existing catalog rows deleted.');
+            if ($hadOrders) {
+                $io->warning('Orders were also deleted (they reference products). Re-run app:sample:seed to restore them.');
+            }
         }
 
         $categories = $this->seedCategories();
@@ -121,8 +134,9 @@ class SeedCatalogCommand extends Command
      */
     private function seedProducts(array $categories, array &$collections): void
     {
+        $galleries = CatalogData::galleries();
         $position = 0;
-        foreach (CatalogData::products() as $data) {
+        foreach (CatalogData::products() as $index => $data) {
             ++$position;
             $flags = CatalogData::derivedFlags($position, $data['price']);
 
@@ -136,7 +150,6 @@ class SeedCatalogCommand extends Command
                 ->setInStock($flags['inStock'])
                 ->setFreeDelivery(true)
                 ->setWarrantyYears(2)
-                ->setImage($data['image'])
                 ->setMaterial($data['material'])
                 ->setColor($data['color'])
                 ->setDimensions($data['dimensions'])
@@ -145,6 +158,16 @@ class SeedCatalogCommand extends Command
                 ->setCollection($this->resolveCollection($data['collection'], $data['image'], $collections));
 
             $this->em->persist($product);
+
+            // Seed the product's image gallery (first entry is the primary).
+            foreach ($galleries[$index] as $sortOrder => $url) {
+                $this->em->persist(
+                    (new ProductImage())
+                        ->setProduct($product)
+                        ->setUrl($url)
+                        ->setSortOrder($sortOrder),
+                );
+            }
         }
     }
 

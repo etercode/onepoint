@@ -109,4 +109,44 @@ final class CatalogData
             'oldPrice' => $onSale ? (int) round($price * 1.18) : null,
         ];
     }
+
+    /**
+     * Image gallery URLs per product (aligned by index with products()). Each
+     * gallery starts with the product's own image (the primary), then borrows a
+     * few more real images from the same category for a believable gallery,
+     * falling back to the global pool for single-product categories. All URLs
+     * are drawn from the dataset, so they always resolve.
+     *
+     * @return list<list<string>>
+     */
+    public static function galleries(): array
+    {
+        $products = self::products();
+        $allUrls = array_map(static fn (array $p): string => $p['image'], $products);
+
+        $byCategory = [];
+        foreach ($products as $p) {
+            $byCategory[$p['category']][] = $p['image'];
+        }
+
+        $galleries = [];
+        foreach ($products as $i => $p) {
+            $gallery = [$p['image']];
+            $want = 3 + ($i % 2); // 3 or 4 images per product
+
+            // Prefer same-category images, then fall back to the whole catalog.
+            foreach (array_merge($byCategory[$p['category']], $allUrls) as $url) {
+                if (\count($gallery) >= $want) {
+                    break;
+                }
+                if (!\in_array($url, $gallery, true)) {
+                    $gallery[] = $url;
+                }
+            }
+
+            $galleries[] = $gallery;
+        }
+
+        return $galleries;
+    }
 }

@@ -47,6 +47,10 @@ security:
         - { path: ^/api/products, roles: PUBLIC_ACCESS }
         - { path: ^/api/categories, roles: PUBLIC_ACCESS }
         - { path: ^/api/collections, roles: PUBLIC_ACCESS }
+        # Storefront consultation form submits publicly (POST only is routed).
+        - { path: ^/api/consultations, roles: PUBLIC_ACCESS }
+        # Admin catalog management requires the admin role (token + ROLE_ADMIN).
+        - { path: ^/api/admin, roles: ROLE_ADMIN }
         - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
 
 when@test:

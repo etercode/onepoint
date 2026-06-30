@@ -3,6 +3,8 @@
 namespace App\Repository;
 
 use App\Dto\ProductQuery;
+use App\Entity\Category;
+use App\Entity\Collection;
 use App\Entity\Product;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\QueryBuilder;
@@ -81,6 +83,34 @@ class ProductRepository extends ServiceEntityRepository
             ->setMaxResults($limit)
             ->getQuery()
             ->getResult();
+    }
+
+    /**
+     * Whether an active product (other than $excludeId) already uses this slug.
+     */
+    public function existsActiveBySlugExcludingId(string $slug, ?int $excludeId = null): bool
+    {
+        $qb = $this->createQueryBuilder('p')
+            ->select('COUNT(p.id)')
+            ->andWhere('p.slug = :slug')
+            ->andWhere('p.deletedAt IS NULL')
+            ->setParameter('slug', $slug);
+
+        if (null !== $excludeId) {
+            $qb->andWhere('p.id != :id')->setParameter('id', $excludeId);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult() > 0;
+    }
+
+    public function countActiveByCategory(Category $category): int
+    {
+        return $this->count(['category' => $category, 'deletedAt' => null]);
+    }
+
+    public function countActiveByCollection(Collection $collection): int
+    {
+        return $this->count(['collection' => $collection, 'deletedAt' => null]);
     }
 
     public function findOneActiveById(int $id): ?Product

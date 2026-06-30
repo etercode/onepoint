@@ -5,6 +5,7 @@ namespace App\Catalog;
 use App\Entity\Category;
 use App\Entity\Collection;
 use App\Entity\Product;
+use App\Entity\ProductImage;
 
 /**
  * Single source of truth for the public JSON shape of catalog resources. The
@@ -14,10 +15,17 @@ use App\Entity\Product;
 final class CatalogPresenter
 {
     /**
+     * @param list<ProductImage> $images ordered gallery; the first is primary
+     *
      * @return array<string, mixed>
      */
-    public function product(Product $product): array
+    public function product(Product $product, array $images = []): array
     {
+        $gallery = array_map(
+            static fn (ProductImage $i): array => ['id' => $i->getId(), 'url' => $i->getUrl()],
+            $images,
+        );
+
         return [
             'id' => $product->getId(),
             'name' => $product->getName(),
@@ -29,10 +37,15 @@ final class CatalogPresenter
             'inStock' => $product->isInStock(),
             'freeDelivery' => $product->isFreeDelivery(),
             'warrantyYears' => $product->getWarrantyYears(),
-            'image' => $product->getImage(),
+            // Primary image (first in the gallery) kept for back-compat with
+            // product cards; `images` is the full ordered gallery.
+            'image' => $gallery[0]['url'] ?? null,
+            'images' => $gallery,
             'category' => $product->getCategory()->getName(),
+            'categoryId' => $product->getCategory()->getId(),
             'categorySlug' => $product->getCategory()->getSlug(),
             'collection' => $product->getCollection()->getName(),
+            'collectionId' => $product->getCollection()->getId(),
             'collectionSlug' => $product->getCollection()->getSlug(),
             'material' => $product->getMaterial(),
             'color' => $product->getColor(),
@@ -42,13 +55,17 @@ final class CatalogPresenter
     }
 
     /**
-     * @param list<Product> $products
+     * @param list<Product>                $products
+     * @param array<int, list<ProductImage>> $imagesByProduct keyed by product id
      *
      * @return list<array<string, mixed>>
      */
-    public function products(array $products): array
+    public function products(array $products, array $imagesByProduct = []): array
     {
-        return array_map($this->product(...), $products);
+        return array_map(
+            fn (Product $p): array => $this->product($p, $imagesByProduct[$p->getId()] ?? []),
+            $products,
+        );
     }
 
     /**

@@ -30,6 +30,10 @@ tags:
     description: Registration, login, token lifecycle
   - name: User
     description: Current user
+  - name: Catalog
+    description: Public storefront catalog (products, categories, collections)
+  - name: Admin
+    description: Admin catalog management (requires ROLE_ADMIN)
 
 paths:
   /api/register:
@@ -568,6 +572,418 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
+  /api/admin/products:
+    post:
+      summary: Create a product
+      description: Requires ROLE_ADMIN. Slug is derived from the name.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductWriteRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '401': { description: Missing/invalid token }
+        '403': { description: Not an admin }
+        '409':
+          description: Slug already used
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '422':
+          description: Validation failed / invalid category or collection
+          content: { application/json: { schema: { $ref: '#/components/schemas/ValidationError' } } }
+
+  /api/admin/products/{id}:
+    put:
+      summary: Replace a product
+      description: Requires ROLE_ADMIN. Full replacement of editable fields.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductWriteRequest' }
+      responses:
+        '200':
+          description: Updated
+          content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } }
+        '403': { description: Not an admin }
+        '404': { description: Product not found }
+        '409': { description: Slug already used }
+        '422': { description: Validation failed / invalid category or collection }
+    delete:
+      summary: Soft-delete a product
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '204': { description: Deleted }
+        '403': { description: Not an admin }
+        '404': { description: Product not found }
+
+  /api/admin/products/{id}/images:
+    post:
+      summary: Add a gallery image by URL
+      description: Requires ROLE_ADMIN. Appends an external/CDN image (or stored path) to the product gallery.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, maxLength: 500 }
+      responses:
+        '201':
+          description: Added
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProductImage' } } }
+        '403': { description: Not an admin }
+        '404': { description: Product not found }
+        '422': { description: Validation failed }
+
+  /api/admin/products/{id}/images/upload:
+    post:
+      summary: Add a gallery image from a file
+      description: Requires ROLE_ADMIN. multipart/form-data with an `image` field (JPEG/PNG/WebP, max 5MB).
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image: { type: string, format: binary }
+      responses:
+        '201':
+          description: Stored
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProductImage' } } }
+        '403': { description: Not an admin }
+        '404': { description: Product not found }
+        '422': { description: Not a valid image }
+
+  /api/admin/products/{id}/images/order:
+    put:
+      summary: Reorder a product's gallery
+      description: Requires ROLE_ADMIN. `ids` must be the product's full set of image ids in the desired order; the first becomes primary.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids: { type: array, items: { type: integer } }
+      responses:
+        '200':
+          description: Reordered product
+          content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } }
+        '403': { description: Not an admin }
+        '404': { description: Product not found }
+        '422': { description: ids is not the product's image set }
+
+  /api/admin/products/{id}/images/{imageId}:
+    delete:
+      summary: Remove a gallery image
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: imageId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '204': { description: Removed }
+        '403': { description: Not an admin }
+        '404': { description: Product or image not found }
+
+  /api/admin/categories:
+    post:
+      summary: Create a category
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryWriteRequest' }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/Category' } } }
+        '403': { description: Not an admin }
+        '409': { description: Slug already used }
+        '422': { description: Validation failed }
+
+  /api/admin/categories/{id}:
+    put:
+      summary: Replace a category
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryWriteRequest' }
+      responses:
+        '200':
+          description: Updated
+          content: { application/json: { schema: { $ref: '#/components/schemas/Category' } } }
+        '403': { description: Not an admin }
+        '404': { description: Category not found }
+        '409': { description: Slug already used }
+        '422': { description: Validation failed }
+    delete:
+      summary: Soft-delete a category
+      description: Fails with 409 if the category still has active products.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '204': { description: Deleted }
+        '403': { description: Not an admin }
+        '404': { description: Category not found }
+        '409': { description: Category has products }
+
+  /api/admin/collections:
+    post:
+      summary: Create a collection
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CollectionWriteRequest' }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/Collection' } } }
+        '403': { description: Not an admin }
+        '409': { description: Slug already used }
+        '422': { description: Validation failed }
+
+  /api/admin/collections/{id}:
+    put:
+      summary: Replace a collection
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CollectionWriteRequest' }
+      responses:
+        '200':
+          description: Updated
+          content: { application/json: { schema: { $ref: '#/components/schemas/Collection' } } }
+        '403': { description: Not an admin }
+        '404': { description: Collection not found }
+        '409': { description: Slug already used }
+        '422': { description: Validation failed }
+    delete:
+      summary: Soft-delete a collection
+      description: Fails with 409 if the collection still has active products.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '204': { description: Deleted }
+        '403': { description: Not an admin }
+        '404': { description: Collection not found }
+        '409': { description: Collection has products }
+
+  /api/consultations:
+    post:
+      summary: Submit a design-consultation request
+      description: Public storefront form submission.
+      tags: [Catalog]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConsultationRequest' }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/Consultation' } } }
+        '422':
+          description: Validation failed
+          content: { application/json: { schema: { $ref: '#/components/schemas/ValidationError' } } }
+
+  /api/admin/orders:
+    get:
+      summary: List orders
+      description: Requires ROLE_ADMIN. Newest first.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, confirmed, delivering, completed, cancelled] } }
+        - { name: q, in: query, schema: { type: string }, description: Search order number / customer / email }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200':
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Order' } }
+                  total: { type: integer }
+        '403': { description: Not an admin }
+        '422': { description: Invalid status filter }
+
+  /api/admin/orders/{id}:
+    get:
+      summary: Get an order with line items
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Order detail
+          content: { application/json: { schema: { $ref: '#/components/schemas/OrderDetail' } } }
+        '403': { description: Not an admin }
+        '404': { description: Order not found }
+    patch:
+      summary: Change an order's status
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderStatusRequest' }
+      responses:
+        '200':
+          description: Updated
+          content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } }
+        '403': { description: Not an admin }
+        '404': { description: Order not found }
+        '422': { description: Invalid status }
+
+  /api/admin/customers:
+    get:
+      summary: List customers (aggregated from orders)
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Customers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Customer' } }
+        '403': { description: Not an admin }
+
+  /api/admin/consultations:
+    get:
+      summary: List consultation requests
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [new, contacted, closed] } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200':
+          description: Consultations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Consultation' } }
+                  total: { type: integer }
+        '403': { description: Not an admin }
+        '422': { description: Invalid status filter }
+
+  /api/admin/consultations/{id}:
+    patch:
+      summary: Change a consultation's status
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConsultationStatusRequest' }
+      responses:
+        '200':
+          description: Updated
+          content: { application/json: { schema: { $ref: '#/components/schemas/Consultation' } } }
+        '403': { description: Not an admin }
+        '404': { description: Consultation not found }
+        '422': { description: Invalid status }
+
+  /api/admin/dashboard:
+    get:
+      summary: Dashboard metrics
+      description: Headline stats, recent orders and best-selling products.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Metrics
+          content: { application/json: { schema: { $ref: '#/components/schemas/DashboardStats' } } }
+        '403': { description: Not an admin }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -860,15 +1276,28 @@ components:
         inStock: { type: boolean }
         freeDelivery: { type: boolean }
         warrantyYears: { type: integer }
-        image: { type: [string, "null"] }
+        image: { type: [string, "null"], description: Primary gallery image (first), for back-compat with cards }
+        images:
+          type: array
+          description: Ordered gallery; first is primary
+          items: { $ref: '#/components/schemas/ProductImage' }
         category: { type: string }
+        categoryId: { type: integer }
         categorySlug: { type: string }
         collection: { type: string }
+        collectionId: { type: integer }
         collectionSlug: { type: string }
         material: { type: [string, "null"] }
         color: { type: [string, "null"] }
         dimensions: { type: [string, "null"] }
         description: { type: [string, "null"] }
+
+    ProductImage:
+      type: object
+      properties:
+        id: { type: integer }
+        url: { type: string, description: Absolute URL or path relative to the uploads root }
+        sortOrder: { type: integer, description: Present on the add/upload responses }
 
     Category:
       type: object
@@ -890,3 +1319,134 @@ components:
         image: { type: [string, "null"] }
         featured: { type: boolean }
         productCount: { type: integer }
+
+    ProductWriteRequest:
+      type: object
+      required: [name, price, categoryId, collectionId]
+      description: Full editable product payload (POST create / PUT replace).
+      properties:
+        name: { type: string, maxLength: 180 }
+        price: { type: integer, minimum: 1, description: Whole manat }
+        categoryId: { type: integer }
+        collectionId: { type: integer }
+        oldPrice: { type: [integer, "null"], minimum: 0 }
+        onSale: { type: boolean, default: false }
+        isNew: { type: boolean, default: false }
+        inStock: { type: boolean, default: true }
+        freeDelivery: { type: boolean, default: true }
+        warrantyYears: { type: integer, default: 2 }
+        material: { type: [string, "null"] }
+        color: { type: [string, "null"] }
+        dimensions: { type: [string, "null"] }
+        description: { type: [string, "null"] }
+
+    CategoryWriteRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 120 }
+        image: { type: [string, "null"] }
+        sortOrder: { type: integer, default: 0 }
+
+    CollectionWriteRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 120 }
+        tagline: { type: [string, "null"] }
+        image: { type: [string, "null"] }
+        featured: { type: boolean, default: false }
+        sortOrder: { type: integer, default: 0 }
+
+    Order:
+      type: object
+      properties:
+        id: { type: integer, description: Numeric id for API calls }
+        orderNumber: { type: string, example: OP-1042 }
+        customer: { type: string }
+        email: { type: string }
+        items: { type: integer, description: Total item quantity }
+        total: { type: integer, description: Whole manat }
+        status: { type: string, enum: [pending, confirmed, delivering, completed, cancelled] }
+        date: { type: string, format: date }
+
+    OrderDetail:
+      allOf:
+        - $ref: '#/components/schemas/Order'
+        - type: object
+          properties:
+            lines:
+              type: array
+              items:
+                type: object
+                properties:
+                  productId: { type: [integer, "null"] }
+                  name: { type: string }
+                  unitPrice: { type: integer }
+                  quantity: { type: integer }
+                  lineTotal: { type: integer }
+
+    OrderStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [pending, confirmed, delivering, completed, cancelled] }
+
+    Customer:
+      type: object
+      description: Aggregated from orders, grouped by email.
+      properties:
+        name: { type: string }
+        email: { type: string }
+        orders: { type: integer }
+        spent: { type: integer, description: Total spent in whole manat }
+        joined: { type: string, format: date, description: First order date }
+
+    Consultation:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        phone: { type: string }
+        room: { type: string, enum: [living-room, bedroom, kitchen, kids, office] }
+        message: { type: [string, "null"] }
+        status: { type: string, enum: [new, contacted, closed] }
+        createdAt: { type: string, format: date-time }
+
+    ConsultationRequest:
+      type: object
+      required: [name, phone, room]
+      properties:
+        name: { type: string, maxLength: 120 }
+        phone: { type: string, maxLength: 40 }
+        room: { type: string, enum: [living-room, bedroom, kitchen, kids, office] }
+        message: { type: [string, "null"], maxLength: 2000 }
+
+    ConsultationStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [new, contacted, closed] }
+
+    DashboardStats:
+      type: object
+      properties:
+        revenue: { type: integer, description: Delivering + completed order totals }
+        orders: { type: integer }
+        products: { type: integer }
+        consultations: { type: integer, description: New consultation count }
+        lowStock: { type: integer, description: Out-of-stock product count }
+        categories: { type: integer }
+        collections: { type: integer }
+        recentOrders:
+          type: array
+          items: { $ref: '#/components/schemas/Order' }
+        topProducts:
+          type: array
+          items:
+            type: object
+            properties:
+              productId: { type: [integer, "null"] }
+              name: { type: string }
+              sales: { type: integer, description: Units sold }
+              revenue: { type: integer }

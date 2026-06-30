@@ -57,9 +57,6 @@ class Product
     #[ORM\Column(options: ['default' => 2])]
     private int $warrantyYears = 2;
 
-    #[ORM\Column(length: 500, nullable: true)]
-    private ?string $image = null;
-
     #[ORM\Column(length: 180, nullable: true)]
     private ?string $material = null;
 
@@ -189,18 +186,6 @@ class Product
     public function setWarrantyYears(int $warrantyYears): static
     {
         $this->warrantyYears = $warrantyYears;
-
-        return $this;
-    }
-
-    public function getImage(): ?string
-    {
-        return $this->image;
-    }
-
-    public function setImage(?string $image): static
-    {
-        $this->image = $image;
 
         return $this;
     }

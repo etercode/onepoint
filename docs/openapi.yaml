@@ -409,6 +409,165 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
 
+  /api/products:
+    get:
+      summary: List storefront products
+      description: >
+        Public, read-only. Returns products matching the optional filters plus
+        the total count for those filters (ignoring limit/offset). Absent
+        filters mean "no constraint".
+      tags: [Catalog]
+      security: []
+      parameters:
+        - { name: category, in: query, schema: { type: string }, description: Category slug }
+        - { name: collection, in: query, schema: { type: string }, description: Collection slug }
+        - { name: q, in: query, schema: { type: string }, description: Free-text search }
+        - { name: ids, in: query, schema: { type: string }, description: 'Comma-separated product ids (cart hydration), e.g. 3,7,12' }
+        - { name: isNew, in: query, schema: { type: boolean } }
+        - { name: onSale, in: query, schema: { type: boolean } }
+        - { name: inStock, in: query, schema: { type: boolean } }
+        - { name: minPrice, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: maxPrice, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: sort, in: query, schema: { type: string, enum: [default, price_asc, price_desc, newest, name], default: default } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: Matched products
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Product' }
+                  total: { type: integer }
+        '422':
+          description: Invalid query parameter
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+
+  /api/products/{id}:
+    get:
+      summary: Get a product by id
+      tags: [Catalog]
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: The product
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/products/{id}/related:
+    get:
+      summary: Get products related to the given one
+      description: Same collection or category, excluding the product itself.
+      tags: [Catalog]
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Related products
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Product' }
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/categories:
+    get:
+      summary: List categories
+      description: Public, read-only. productCount and priceFrom are derived live.
+      tags: [Catalog]
+      security: []
+      responses:
+        '200':
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Category' }
+
+  /api/categories/{slug}:
+    get:
+      summary: Get a category by slug
+      tags: [Catalog]
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The category
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Category' }
+        '404':
+          description: Category not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/collections:
+    get:
+      summary: List collections
+      tags: [Catalog]
+      security: []
+      parameters:
+        - { name: featured, in: query, schema: { type: boolean }, description: Only the curated home-page set }
+      responses:
+        '200':
+          description: Collections
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Collection' }
+
+  /api/collections/{slug}:
+    get:
+      summary: Get a collection by slug
+      tags: [Catalog]
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The collection
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Collection' }
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -535,7 +694,7 @@ components:
           enum: [light, dark, dim]
         accent:
           type: string
-          enum: [blue, facebook, purple, green, rose]
+          enum: [terracotta, blue, facebook, purple, green, rose]
         fontFamily:
           type: string
           enum: [system, classic, mono]
@@ -563,7 +722,7 @@ components:
               enum: [light, dark, dim]
             accent:
               type: string
-              enum: [blue, facebook, purple, green, rose]
+              enum: [terracotta, blue, facebook, purple, green, rose]
             fontFamily:
               type: string
               enum: [system, classic, mono]
@@ -684,3 +843,50 @@ components:
                 type: string
               title:
                 type: string
+
+    Product:
+      type: object
+      description: >
+        A storefront product. `category` / `collection` are display names;
+        `categorySlug` / `collectionSlug` are the matching URL slugs.
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        price: { type: integer, description: Whole manat }
+        oldPrice: { type: [integer, "null"] }
+        onSale: { type: boolean }
+        isNew: { type: boolean }
+        inStock: { type: boolean }
+        freeDelivery: { type: boolean }
+        warrantyYears: { type: integer }
+        image: { type: [string, "null"] }
+        category: { type: string }
+        categorySlug: { type: string }
+        collection: { type: string }
+        collectionSlug: { type: string }
+        material: { type: [string, "null"] }
+        color: { type: [string, "null"] }
+        dimensions: { type: [string, "null"] }
+        description: { type: [string, "null"] }
+
+    Category:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        image: { type: [string, "null"] }
+        productCount: { type: integer, description: Live count of active products }
+        priceFrom: { type: [integer, "null"], description: Lowest product price, or null if empty }
+
+    Collection:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        tagline: { type: [string, "null"] }
+        image: { type: [string, "null"] }
+        featured: { type: boolean }
+        productCount: { type: integer }

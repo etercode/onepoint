@@ -13,7 +13,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 readonly class AppearancePreferencesRequest
 {
     public const THEMES = ['light', 'dark', 'dim'];
-    public const ACCENTS = ['blue', 'facebook', 'purple', 'green', 'rose'];
+    public const ACCENTS = ['terracotta', 'blue', 'facebook', 'purple', 'green', 'rose'];
     public const FONT_FAMILIES = ['system', 'classic', 'mono'];
     public const FONT_SIZES = ['sm', 'md', 'lg'];
 

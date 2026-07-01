@@ -28,10 +28,9 @@ class ProductWriteRequest
         #[Assert\Positive]
         public ?int $collectionId = null,
 
+        // "On sale" is derived server-side from oldPrice (> price); no manual flag.
         #[Assert\PositiveOrZero]
         public ?int $oldPrice = null,
-
-        public bool $onSale = false,
 
         public bool $isNew = false,
 
@@ -43,16 +42,17 @@ class ProductWriteRequest
         #[Assert\LessThanOrEqual(99)]
         public int $warrantyYears = 2,
 
-        #[Assert\Length(max: 180)]
-        public ?string $material = null,
-
-        #[Assert\Length(max: 120)]
-        public ?string $color = null,
-
-        #[Assert\Length(max: 120)]
-        public ?string $dimensions = null,
-
         public ?string $description = null,
+
+        /**
+         * Category-driven spec values keyed by attribute code, e.g.
+         * {"material": "Parça", "seat_count": 3, "foldable": true}. Validated
+         * against the category's attribute definitions.
+         *
+         * @var array<string, mixed>
+         */
+        #[Assert\Type('array')]
+        public array $attributes = [],
     ) {
     }
 }

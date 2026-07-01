@@ -621,6 +621,25 @@ paths:
         '404': { description: Product not found }
         '409': { description: Slug already used }
         '422': { description: Validation failed / invalid category or collection }
+    patch:
+      summary: Partial product update (inline list toggles)
+      description: Requires ROLE_ADMIN. Applies only the provided fields (stock / new); used by the admin product list quick toggles.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductQuickUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } }
+        '403': { description: Not an admin }
+        '404': { description: Product not found }
     delete:
       summary: Soft-delete a product
       tags: [Admin]
@@ -636,7 +655,10 @@ paths:
   /api/admin/products/{id}/images:
     post:
       summary: Add a gallery image by URL
-      description: Requires ROLE_ADMIN. Appends an external/CDN image (or stored path) to the product gallery.
+      description: >-
+        Requires ROLE_ADMIN. A remote (http/https) URL is downloaded and stored
+        locally under public/uploads/products (self-hosted), then appended to the
+        gallery.
       tags: [Admin]
       security:
         - bearerAuth: []
@@ -657,7 +679,7 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/ProductImage' } } }
         '403': { description: Not an admin }
         '404': { description: Product not found }
-        '422': { description: Validation failed }
+        '422': { description: Validation failed / image_download_failed }
 
   /api/admin/products/{id}/images/upload:
     post:
@@ -778,6 +800,109 @@ paths:
         '404': { description: Category not found }
         '409': { description: Category has products }
 
+  /api/admin/categories/{id}/image:
+    post:
+      summary: Upload a category image
+      description: Multipart upload (field `image`, JPEG/PNG/WebP, max 5MB). Replaces any previous local file. Stored under public/uploads/categories.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image: { type: string, format: binary }
+      responses:
+        '200':
+          description: Updated category
+          content: { application/json: { schema: { $ref: '#/components/schemas/Category' } } }
+        '403': { description: Not an admin }
+        '404': { description: Category not found }
+        '422': { description: Invalid image }
+
+  /api/admin/categories/{id}/attributes:
+    get:
+      summary: List a category's spec attributes
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Attribute list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CategoryAttribute' }
+        '403': { description: Not an admin }
+        '404': { description: Category not found }
+    post:
+      summary: Add a spec attribute to a category
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryAttributeWriteRequest' }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/CategoryAttribute' } } }
+        '403': { description: Not an admin }
+        '404': { description: Category not found }
+        '409': { description: Attribute code already used in this category }
+        '422': { description: Validation failed (e.g. options required for select) }
+
+  /api/admin/categories/{id}/attributes/{attrId}:
+    put:
+      summary: Replace a category attribute
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: attrId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryAttributeWriteRequest' }
+      responses:
+        '200':
+          description: Updated
+          content: { application/json: { schema: { $ref: '#/components/schemas/CategoryAttribute' } } }
+        '403': { description: Not an admin }
+        '404': { description: Category or attribute not found }
+        '409': { description: Attribute code already used in this category }
+        '422': { description: Validation failed }
+    delete:
+      summary: Delete a category attribute
+      description: Also removes all product values for this attribute (cascade).
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: attrId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '204': { description: Deleted }
+        '403': { description: Not an admin }
+        '404': { description: Category or attribute not found }
+
   /api/admin/collections:
     post:
       summary: Create a collection
@@ -831,6 +956,31 @@ paths:
         '403': { description: Not an admin }
         '404': { description: Collection not found }
         '409': { description: Collection has products }
+
+  /api/admin/collections/{id}/image:
+    post:
+      summary: Upload a collection image
+      description: Multipart upload (field `image`, JPEG/PNG/WebP, max 5MB). Replaces any previous local file. Stored under public/uploads/collections.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image: { type: string, format: binary }
+      responses:
+        '200':
+          description: Updated collection
+          content: { application/json: { schema: { $ref: '#/components/schemas/Collection' } } }
+        '403': { description: Not an admin }
+        '404': { description: Collection not found }
+        '422': { description: Invalid image }
 
   /api/consultations:
     post:
@@ -983,6 +1133,58 @@ paths:
           description: Metrics
           content: { application/json: { schema: { $ref: '#/components/schemas/DashboardStats' } } }
         '403': { description: Not an admin }
+
+  /api/catalog-menu:
+    get:
+      summary: Catalog mega-menu content (public)
+      description: Admin-editable heading/button text plus a random promo product strip.
+      tags: [Catalog]
+      responses:
+        '200':
+          description: Menu content
+          content: { application/json: { schema: { $ref: '#/components/schemas/CatalogMenu' } } }
+
+  /api/search/suggest:
+    get:
+      summary: Typo-tolerant search suggestions (public)
+      description: pg_trgm-backed autocomplete. Returns live product matches plus a "did you mean" suggestion when the query only matches fuzzily.
+      tags: [Catalog]
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string, maxLength: 120 }, description: Query (min 2 chars to return results) }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50, default: 6 } }
+      responses:
+        '200':
+          description: Suggestions
+          content: { application/json: { schema: { $ref: '#/components/schemas/SearchSuggest' } } }
+        '422': { description: Validation failed }
+
+  /api/admin/catalog-menu:
+    get:
+      summary: Get editable catalog-menu text
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Editable text
+          content: { application/json: { schema: { $ref: '#/components/schemas/CatalogMenuText' } } }
+        '403': { description: Not an admin }
+    put:
+      summary: Update catalog-menu text
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CatalogMenuWriteRequest' }
+      responses:
+        '200':
+          description: Updated
+          content: { application/json: { schema: { $ref: '#/components/schemas/CatalogMenuText' } } }
+        '403': { description: Not an admin }
+        '422': { description: Validation failed }
 
 components:
   securitySchemes:
@@ -1287,10 +1489,22 @@ components:
         collection: { type: string }
         collectionId: { type: integer }
         collectionSlug: { type: string }
-        material: { type: [string, "null"] }
-        color: { type: [string, "null"] }
-        dimensions: { type: [string, "null"] }
+        specs:
+          type: array
+          description: Category-driven spec rows (empty on list endpoints)
+          items: { $ref: '#/components/schemas/ProductSpec' }
         description: { type: [string, "null"] }
+
+    ProductSpec:
+      type: object
+      description: One resolved spec row for a product (from its category's attributes).
+      properties:
+        code: { type: string }
+        label: { type: string }
+        type: { type: string, enum: [text, number, boolean, select] }
+        unit: { type: [string, "null"] }
+        value: { type: string, description: Display-formatted value (booleans as bəli/xeyr, unit appended) }
+        raw: { type: [string, "null"], description: Stored raw value, for edit forms }
 
     ProductImage:
       type: object
@@ -1329,16 +1543,60 @@ components:
         price: { type: integer, minimum: 1, description: Whole manat }
         categoryId: { type: integer }
         collectionId: { type: integer }
-        oldPrice: { type: [integer, "null"], minimum: 0 }
-        onSale: { type: boolean, default: false }
+        oldPrice: { type: [integer, "null"], minimum: 0, description: 'Pre-discount price; when > price the product is automatically "on sale". No manual onSale flag.' }
         isNew: { type: boolean, default: false }
         inStock: { type: boolean, default: true }
         freeDelivery: { type: boolean, default: true }
         warrantyYears: { type: integer, default: 2 }
-        material: { type: [string, "null"] }
-        color: { type: [string, "null"] }
-        dimensions: { type: [string, "null"] }
         description: { type: [string, "null"] }
+        attributes:
+          type: object
+          description: >-
+            Category-driven spec values keyed by attribute code, e.g.
+            {"material": "Parça", "seat_count": 3, "foldable": true}. Validated
+            against the category's attribute definitions (required, options,
+            number). Unknown codes are ignored.
+          additionalProperties: true
+
+    ProductQuickUpdateRequest:
+      type: object
+      description: Partial update for inline list toggles. Only provided fields are applied.
+      properties:
+        inStock: { type: [boolean, "null"] }
+        isNew: { type: [boolean, "null"] }
+
+    CategoryAttribute:
+      type: object
+      description: A spec field defined on a category.
+      properties:
+        id: { type: integer }
+        label: { type: string }
+        code: { type: string, description: Stable machine key, unique within the category }
+        type: { type: string, enum: [text, number, boolean, select] }
+        unit: { type: [string, "null"] }
+        options:
+          type: array
+          description: Allowed choices for select-type attributes
+          items: { type: string }
+        required: { type: boolean }
+        filterable: { type: boolean }
+        sortOrder: { type: integer }
+
+    CategoryAttributeWriteRequest:
+      type: object
+      required: [label]
+      properties:
+        label: { type: string, maxLength: 120 }
+        code: { type: [string, "null"], maxLength: 80, description: Derived from label when omitted }
+        type: { type: string, enum: [text, number, boolean, select], default: text }
+        unit: { type: [string, "null"], maxLength: 20 }
+        options:
+          type: [array, "null"]
+          items: { type: string }
+          description: Required (non-empty) for select type
+        required: { type: boolean, default: false }
+        filterable: { type: boolean, default: false }
+        sortOrder: { type: [integer, "null"], description: Appended to the end when omitted }
 
     CategoryWriteRequest:
       type: object
@@ -1347,6 +1605,58 @@ components:
         name: { type: string, maxLength: 120 }
         image: { type: [string, "null"] }
         sortOrder: { type: integer, default: 0 }
+
+    CatalogMenuText:
+      type: object
+      properties:
+        heading: { type: string }
+        subheading: { type: string }
+        buttonLabel: { type: string }
+        buttonHref: { type: string }
+
+    CatalogMenu:
+      type: object
+      description: Public mega-menu content (editable text + random promos).
+      allOf:
+        - $ref: '#/components/schemas/CatalogMenuText'
+        - type: object
+          properties:
+            promos:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: integer }
+                  name: { type: string }
+                  image: { type: [string, "null"] }
+                  price: { type: integer }
+                  href: { type: string }
+
+    CatalogMenuWriteRequest:
+      type: object
+      required: [heading, buttonLabel, buttonHref]
+      properties:
+        heading: { type: string, maxLength: 120 }
+        subheading: { type: string, maxLength: 200 }
+        buttonLabel: { type: string, maxLength: 60 }
+        buttonHref: { type: string, maxLength: 200 }
+
+    SearchSuggest:
+      type: object
+      properties:
+        query: { type: string }
+        suggestion: { type: [string, "null"], description: '"Did you mean" product name, or null' }
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              slug: { type: string }
+              price: { type: integer }
+              image: { type: [string, "null"] }
+              href: { type: string }
 
     CollectionWriteRequest:
       type: object

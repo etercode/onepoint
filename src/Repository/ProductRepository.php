@@ -6,6 +6,7 @@ use App\Dto\ProductQuery;
 use App\Entity\Category;
 use App\Entity\Collection;
 use App\Entity\Product;
+use Doctrine\DBAL\ParameterType;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
@@ -161,7 +162,7 @@ class ProductRepository extends ServiceEntityRepository
         }
         if (null !== $query->q && '' !== trim($query->q)) {
             $qb->andWhere(
-                'LOWER(p.name) LIKE :q OR LOWER(p.description) LIKE :q OR LOWER(p.material) LIKE :q '
+                'LOWER(p.name) LIKE :q OR LOWER(p.description) LIKE :q '
                 .'OR LOWER(c.name) LIKE :q OR LOWER(col.name) LIKE :q'
             )->setParameter('q', '%'.mb_strtolower(trim($query->q)).'%');
         }
@@ -176,5 +177,79 @@ class ProductRepository extends ServiceEntityRepository
             'name' => $qb->orderBy('p.name', 'ASC'),
             default => $qb->orderBy('p.id', 'ASC'),
         };
+    }
+
+    /**
+     * Random active products that have at least one image, for the catalog-menu
+     * promo strip. Returns lightweight rows (not entities).
+     *
+     * @return list<array{id: int, name: string, slug: string, price: int, image: ?string}>
+     */
+    public function findRandomForPromo(int $limit): array
+    {
+        $sql = <<<'SQL'
+            SELECT p.id, p.name, p.slug, p.price,
+                   (SELECT pi.url FROM product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC, pi.id ASC LIMIT 1) AS image
+            FROM products p
+            WHERE p.deleted_at IS NULL
+              AND EXISTS (SELECT 1 FROM product_images pi WHERE pi.product_id = p.id)
+            ORDER BY RANDOM()
+            LIMIT :limit
+            SQL;
+
+        /** @var list<array{id: int, name: string, slug: string, price: int, image: ?string}> */
+        return $this->getEntityManager()->getConnection()
+            ->executeQuery($sql, ['limit' => $limit], ['limit' => ParameterType::INTEGER])
+            ->fetchAllAssociative();
+    }
+
+    /**
+     * Typo-tolerant product search for the storefront autocomplete, using
+     * pg_trgm. Ranks exact substring matches first, then by trigram similarity,
+     * so misspellings ("divann", "lena divan") still surface results. Returns
+     * lightweight rows plus whether each was a substring ("exact") match and its
+     * similarity, so the caller can decide on a "did you mean" suggestion.
+     *
+     * @return list<array{id: int, name: string, slug: string, price: int, image: ?string, exact: bool, sim: float}>
+     */
+    public function searchSuggest(string $q, int $limit): array
+    {
+        $q = trim($q);
+        if ('' === $q) {
+            return [];
+        }
+
+        // word_similarity(q, name) compares the query against the most similar
+        // word in the name, so short/partial typos ("lna" -> "Lena") and
+        // multi-word names still match, unlike whole-string similarity().
+        $sql = <<<'SQL'
+            SELECT p.id, p.name, p.slug, p.price,
+                   (SELECT pi.url FROM product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC, pi.id ASC LIMIT 1) AS image,
+                   (LOWER(p.name) LIKE LOWER(:like)) AS exact,
+                   GREATEST(similarity(p.name, :q), word_similarity(:q, p.name)) AS sim
+            FROM products p
+            WHERE p.deleted_at IS NULL
+              AND (LOWER(p.name) LIKE LOWER(:like) OR word_similarity(:q, p.name) > 0.3)
+            ORDER BY exact DESC, sim DESC, p.id ASC
+            LIMIT :limit
+            SQL;
+
+        $rows = $this->getEntityManager()->getConnection()
+            ->executeQuery(
+                $sql,
+                ['q' => $q, 'like' => '%'.$q.'%', 'limit' => $limit],
+                ['limit' => ParameterType::INTEGER],
+            )
+            ->fetchAllAssociative();
+
+        return array_map(static fn (array $r): array => [
+            'id' => (int) $r['id'],
+            'name' => (string) $r['name'],
+            'slug' => (string) $r['slug'],
+            'price' => (int) $r['price'],
+            'image' => $r['image'],
+            'exact' => (bool) $r['exact'],
+            'sim' => (float) $r['sim'],
+        ], $rows);
     }
 }

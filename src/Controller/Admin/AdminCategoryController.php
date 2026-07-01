@@ -8,13 +8,18 @@ use App\Dto\CategoryWriteRequest;
 use App\Entity\Category;
 use App\Repository\CategoryRepository;
 use App\Repository\ProductRepository;
+use App\Service\CategoryImageStorage;
+use App\Service\ImageStorage;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
+use Symfony\Component\HttpKernel\Attribute\MapUploadedFile;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Component\Validator\Constraints as Assert;
 
 /**
  * Admin category management (requires ROLE_ADMIN). Reads reuse the public
@@ -29,6 +34,7 @@ class AdminCategoryController extends AbstractController
         private readonly ProductRepository $products,
         private readonly EntityManagerInterface $em,
         private readonly CatalogPresenter $presenter,
+        private readonly ImageStorage $images,
     ) {
     }
 
@@ -67,6 +73,36 @@ class AdminCategoryController extends AbstractController
         return $this->json($this->presenter->category($category, $count, null));
     }
 
+    /**
+     * Upload a category image (multipart). Replaces any previously stored local
+     * file. Returns the updated category.
+     */
+    #[Route('/{id}/image', name: 'api_admin_categories_image_upload', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function uploadImage(
+        int $id,
+        #[MapUploadedFile(new Assert\Image(
+            maxSize: '5M',
+            mimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+            mimeTypesMessage: 'Please upload a JPEG, PNG or WebP image.',
+        ))]
+        UploadedFile $image,
+        CategoryImageStorage $storage,
+    ): JsonResponse {
+        $category = $this->categories->findOneActiveById($id);
+        if (null === $category) {
+            return $this->json(['error' => 'category_not_found'], Response::HTTP_NOT_FOUND);
+        }
+
+        $previous = $category->getImage();
+        $category->setImage($storage->store($image));
+        $this->em->flush();
+        $storage->remove($previous);
+
+        $count = $this->products->countActiveByCategory($category);
+
+        return $this->json($this->presenter->category($category, $count, null));
+    }
+
     #[Route('/{id}', name: 'api_admin_categories_delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
     public function delete(int $id): JsonResponse
     {
@@ -95,10 +131,11 @@ class AdminCategoryController extends AbstractController
             return $this->json(['error' => 'slug_already_used'], Response::HTTP_CONFLICT);
         }
 
+        // A pasted external URL is downloaded and stored locally.
         $category
             ->setName($payload->name)
             ->setSlug($slug)
-            ->setImage($payload->image)
+            ->setImage($this->images->localize($payload->image, 'categories'))
             ->setSortOrder($payload->sortOrder);
 
         return null;

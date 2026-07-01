@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Catalog\CatalogPresenter;
+use App\Catalog\ProductSpecs;
 use App\Dto\ProductQuery;
 use App\Entity\Product;
 use App\Repository\ProductImageRepository;
@@ -23,6 +24,7 @@ class ProductController extends AbstractController
         private readonly ProductRepository $products,
         private readonly ProductImageRepository $images,
         private readonly CatalogPresenter $presenter,
+        private readonly ProductSpecs $specs,
     ) {
     }
 
@@ -52,7 +54,11 @@ class ProductController extends AbstractController
             return $this->json(['error' => 'product_not_found'], Response::HTTP_NOT_FOUND);
         }
 
-        return $this->json($this->presenter->product($product, $this->images->findForProduct($product)));
+        return $this->json($this->presenter->product(
+            $product,
+            $this->images->findForProduct($product),
+            $this->specs->specsFor($product),
+        ));
     }
 
     #[Route('/api/products/{id}/related', name: 'api_products_related', methods: ['GET'], requirements: ['id' => '\d+'])]

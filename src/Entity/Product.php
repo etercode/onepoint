@@ -57,15 +57,6 @@ class Product
     #[ORM\Column(options: ['default' => 2])]
     private int $warrantyYears = 2;
 
-    #[ORM\Column(length: 180, nullable: true)]
-    private ?string $material = null;
-
-    #[ORM\Column(length: 120, nullable: true)]
-    private ?string $color = null;
-
-    #[ORM\Column(length: 120, nullable: true)]
-    private ?string $dimensions = null;
-
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $description = null;
 
@@ -186,42 +177,6 @@ class Product
     public function setWarrantyYears(int $warrantyYears): static
     {
         $this->warrantyYears = $warrantyYears;
-
-        return $this;
-    }
-
-    public function getMaterial(): ?string
-    {
-        return $this->material;
-    }
-
-    public function setMaterial(?string $material): static
-    {
-        $this->material = $material;
-
-        return $this;
-    }
-
-    public function getColor(): ?string
-    {
-        return $this->color;
-    }
-
-    public function setColor(?string $color): static
-    {
-        $this->color = $color;
-
-        return $this;
-    }
-
-    public function getDimensions(): ?string
-    {
-        return $this->dimensions;
-    }
-
-    public function setDimensions(?string $dimensions): static
-    {
-        $this->dimensions = $dimensions;
 
         return $this;
     }

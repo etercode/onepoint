@@ -5,10 +5,12 @@ namespace App\Command;
 use App\Catalog\CatalogData;
 use App\Catalog\Slugger;
 use App\Entity\Category;
+use App\Entity\CategoryAttribute;
 use App\Entity\Collection;
 use App\Entity\Order;
 use App\Entity\OrderItem;
 use App\Entity\Product;
+use App\Entity\ProductAttributeValue;
 use App\Entity\ProductImage;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -55,9 +57,11 @@ class SeedCatalogCommand extends Command
             $this->em->createQuery('DELETE FROM '.OrderItem::class.' i')->execute();
             $this->em->createQuery('DELETE FROM '.Order::class.' o')->execute();
 
-            // Respect FK order: images -> products -> collections/categories.
+            // Respect FK order: values/images -> products -> attributes -> etc.
+            $this->em->createQuery('DELETE FROM '.ProductAttributeValue::class.' v')->execute();
             $this->em->createQuery('DELETE FROM '.ProductImage::class.' pi')->execute();
             $this->em->createQuery('DELETE FROM '.Product::class.' p')->execute();
+            $this->em->createQuery('DELETE FROM '.CategoryAttribute::class.' a')->execute();
             $this->em->createQuery('DELETE FROM '.Collection::class.' c')->execute();
             $this->em->createQuery('DELETE FROM '.Category::class.' c')->execute();
             $io->note('Existing catalog rows deleted.');
@@ -67,8 +71,9 @@ class SeedCatalogCommand extends Command
         }
 
         $categories = $this->seedCategories();
+        $attributes = $this->seedDefaultAttributes($categories);
         $collections = $this->seedFeaturedCollections();
-        $this->seedProducts($categories, $collections);
+        $this->seedProducts($categories, $attributes, $collections);
 
         $this->em->flush();
 
@@ -103,6 +108,46 @@ class SeedCatalogCommand extends Command
     }
 
     /**
+     * The spec attributes seeded on every category by default. The existing
+     * Material/Rəng/Ölçü fields become ordinary attributes so nothing is
+     * hardcoded on the product any more.
+     */
+    private const DEFAULT_ATTRIBUTES = [
+        ['label' => 'Material', 'code' => 'material', 'filterable' => true],
+        ['label' => 'Rəng', 'code' => 'color', 'filterable' => true],
+        ['label' => 'Ölçü', 'code' => 'dimensions', 'filterable' => false],
+    ];
+
+    /**
+     * Seeds the default attributes for each category.
+     *
+     * @param array<string, Category> $categories
+     *
+     * @return array<string, array<string, CategoryAttribute>> [categoryName][code] => attribute
+     */
+    private function seedDefaultAttributes(array $categories): array
+    {
+        $map = [];
+        foreach ($categories as $name => $category) {
+            $order = 0;
+            foreach (self::DEFAULT_ATTRIBUTES as $def) {
+                $attribute = (new CategoryAttribute())
+                    ->setCategory($category)
+                    ->setLabel($def['label'])
+                    ->setCode($def['code'])
+                    ->setType(CategoryAttribute::TYPE_TEXT)
+                    ->setRequired(false)
+                    ->setFilterable($def['filterable'])
+                    ->setSortOrder($order++);
+                $this->em->persist($attribute);
+                $map[$name][$def['code']] = $attribute;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
      * Creates the curated, featured collections. Other collections are created
      * on demand while seeding products.
      *
@@ -128,11 +173,12 @@ class SeedCatalogCommand extends Command
     }
 
     /**
-     * @param array<string, Category>   $categories
-     * @param array<string, Collection> $collections keyed by name; grows as
-     *                                               non-curated collections are seen
+     * @param array<string, Category>                           $categories
+     * @param array<string, array<string, CategoryAttribute>>   $attributes  [categoryName][code] => attribute
+     * @param array<string, Collection>                         $collections keyed by name; grows as
+     *                                                                       non-curated collections are seen
      */
-    private function seedProducts(array $categories, array &$collections): void
+    private function seedProducts(array $categories, array $attributes, array &$collections): void
     {
         $galleries = CatalogData::galleries();
         $position = 0;
@@ -150,9 +196,6 @@ class SeedCatalogCommand extends Command
                 ->setInStock($flags['inStock'])
                 ->setFreeDelivery(true)
                 ->setWarrantyYears(2)
-                ->setMaterial($data['material'])
-                ->setColor($data['color'])
-                ->setDimensions($data['dimensions'])
                 ->setDescription($data['description'])
                 ->setCategory($categories[$data['category']])
                 ->setCollection($this->resolveCollection($data['collection'], $data['image'], $collections));
@@ -168,7 +211,27 @@ class SeedCatalogCommand extends Command
                         ->setSortOrder($sortOrder),
                 );
             }
+
+            // Migrate the former fixed fields into category attribute values.
+            $categoryAttributes = $attributes[$data['category']] ?? [];
+            $this->addValue($product, $categoryAttributes['material'] ?? null, $data['material'] ?? null);
+            $this->addValue($product, $categoryAttributes['color'] ?? null, $data['color'] ?? null);
+            $this->addValue($product, $categoryAttributes['dimensions'] ?? null, $data['dimensions'] ?? null);
         }
+    }
+
+    private function addValue(Product $product, ?CategoryAttribute $attribute, ?string $value): void
+    {
+        if (null === $attribute || null === $value || '' === $value) {
+            return;
+        }
+
+        $this->em->persist(
+            (new ProductAttributeValue())
+                ->setProduct($product)
+                ->setAttribute($attribute)
+                ->setValue($value),
+        );
     }
 
     /**

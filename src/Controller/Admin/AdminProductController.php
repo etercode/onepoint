@@ -3,9 +3,11 @@
 namespace App\Controller\Admin;
 
 use App\Catalog\CatalogPresenter;
+use App\Catalog\ProductSpecs;
 use App\Catalog\Slugger;
 use App\Dto\ProductImageOrderRequest;
 use App\Dto\ProductImageUrlRequest;
+use App\Dto\ProductQuickUpdateRequest;
 use App\Dto\ProductWriteRequest;
 use App\Entity\Product;
 use App\Entity\ProductImage;
@@ -13,6 +15,7 @@ use App\Repository\CategoryRepository;
 use App\Repository\CollectionRepository;
 use App\Repository\ProductImageRepository;
 use App\Repository\ProductRepository;
+use App\Service\ImageStorage;
 use App\Service\ProductImageStorage;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -42,6 +45,7 @@ class AdminProductController extends AbstractController
         private readonly CollectionRepository $collections,
         private readonly EntityManagerInterface $em,
         private readonly CatalogPresenter $presenter,
+        private readonly ProductSpecs $specs,
     ) {
     }
 
@@ -54,10 +58,16 @@ class AdminProductController extends AbstractController
             return $error;
         }
 
+        $specErrors = $this->specs->validate($product->getCategory(), $payload->attributes);
+        if ([] !== $specErrors) {
+            return $this->json(['error' => 'invalid_attributes', 'details' => $specErrors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
         $this->em->persist($product);
+        $this->specs->apply($product, $payload->attributes);
         $this->em->flush();
 
-        return $this->json($this->presenter->product($product), Response::HTTP_CREATED);
+        return $this->json($this->presenter->product($product, [], $this->specs->specsFor($product)), Response::HTTP_CREATED);
     }
 
     #[Route('/{id}', name: 'api_admin_products_update', methods: ['PUT'], requirements: ['id' => '\d+'], format: 'json')]
@@ -73,9 +83,46 @@ class AdminProductController extends AbstractController
             return $error;
         }
 
+        $specErrors = $this->specs->validate($product->getCategory(), $payload->attributes);
+        if ([] !== $specErrors) {
+            return $this->json(['error' => 'invalid_attributes', 'details' => $specErrors], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $this->specs->apply($product, $payload->attributes);
         $this->em->flush();
 
-        return $this->json($this->presenter->product($product, $this->images->findForProduct($product)));
+        return $this->json($this->presenter->product(
+            $product,
+            $this->images->findForProduct($product),
+            $this->specs->specsFor($product),
+        ));
+    }
+
+    /**
+     * Partial update for inline list toggles (stock / new). Only provided fields
+     * are applied.
+     */
+    #[Route('/{id}', name: 'api_admin_products_patch', methods: ['PATCH'], requirements: ['id' => '\d+'], format: 'json')]
+    public function patch(int $id, #[MapRequestPayload] ProductQuickUpdateRequest $payload): JsonResponse
+    {
+        $product = $this->products->findOneActiveById($id);
+        if (null === $product) {
+            return $this->json(['error' => 'product_not_found'], Response::HTTP_NOT_FOUND);
+        }
+
+        if (null !== $payload->inStock) {
+            $product->setInStock($payload->inStock);
+        }
+        if (null !== $payload->isNew) {
+            $product->setIsNew($payload->isNew);
+        }
+        $this->em->flush();
+
+        return $this->json($this->presenter->product(
+            $product,
+            $this->images->findForProduct($product),
+            $this->specs->specsFor($product),
+        ));
     }
 
     #[Route('/{id}', name: 'api_admin_products_delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
@@ -96,14 +143,25 @@ class AdminProductController extends AbstractController
      * Append a gallery image by URL (external/CDN, or an existing stored path).
      */
     #[Route('/{id}/images', name: 'api_admin_products_image_add', methods: ['POST'], requirements: ['id' => '\d+'], format: 'json')]
-    public function addImageByUrl(int $id, #[MapRequestPayload] ProductImageUrlRequest $payload): JsonResponse
+    public function addImageByUrl(int $id, #[MapRequestPayload] ProductImageUrlRequest $payload, ImageStorage $storage): JsonResponse
     {
         $product = $this->products->findOneActiveById($id);
         if (null === $product) {
             return $this->json(['error' => 'product_not_found'], Response::HTTP_NOT_FOUND);
         }
 
-        return $this->json($this->appendImage($product, $payload->url), Response::HTTP_CREATED);
+        // Self-host external URLs: download the image locally rather than hot-
+        // linking a remote site.
+        $url = $payload->url;
+        if (ImageStorage::isRemote($url)) {
+            $local = $storage->downloadRemote($url, 'products');
+            if (null === $local) {
+                return $this->json(['error' => 'image_download_failed'], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+            $url = $local;
+        }
+
+        return $this->json($this->appendImage($product, $url), Response::HTTP_CREATED);
     }
 
     /**
@@ -226,19 +284,21 @@ class AdminProductController extends AbstractController
             return $this->json(['error' => 'slug_already_used'], Response::HTTP_CONFLICT);
         }
 
+        // "On sale" is derived, not set by hand: a product is on sale exactly
+        // when it has a higher pre-discount (old) price. Ignore contradictory
+        // old prices (<= current price).
+        $oldPrice = (null !== $payload->oldPrice && $payload->oldPrice > $payload->price) ? $payload->oldPrice : null;
+
         $product
             ->setName($payload->name)
             ->setSlug($slug)
             ->setPrice($payload->price)
-            ->setOldPrice($payload->oldPrice)
-            ->setOnSale($payload->onSale)
+            ->setOldPrice($oldPrice)
+            ->setOnSale(null !== $oldPrice)
             ->setIsNew($payload->isNew)
             ->setInStock($payload->inStock)
             ->setFreeDelivery($payload->freeDelivery)
             ->setWarrantyYears($payload->warrantyYears)
-            ->setMaterial($payload->material)
-            ->setColor($payload->color)
-            ->setDimensions($payload->dimensions)
             ->setDescription($payload->description)
             ->setCategory($category)
             ->setCollection($collection);
